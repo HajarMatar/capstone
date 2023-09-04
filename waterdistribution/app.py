@@ -4,15 +4,13 @@ import mysql.connector
 import os
 from datetime import datetime,timedelta
 from flask_bcrypt import Bcrypt
-import bcrypt
-import jwt
+
 from functools import wraps
+
 from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:3000", "*"])
-
-bcrypt = Bcrypt(app)
 
 db_config = {
     'host': 'localhost',
@@ -22,37 +20,12 @@ db_config = {
     'auth_plugin': 'mysql_native_password'
 }
 app.config['SECRET_KEY'] = 'Qgtd12@tRv&kawrtYF'
-# decorator for verifying the JWT
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = None
-        # jwt is passed in the request header
-        if 'x-access-token' in request.headers:
-            token = request.headers['x-access-token']
-        # return 401 if token is not passed
-        if not token:
-            return jsonify({'message' : 'Token is missing !!'}), 401
-  
-        try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-        except jwt.ExpiredSignatureError:
-            return jsonify({'message': 'Token has expired'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'message': 'Invalid token'}), 401
-
-        return f( *args, **kwargs)
-
-    return decorated
 
 
-def generate_token(userid):
-    payload = {
-        'userid': userid,
-        'exp': datetime.utcnow() + timedelta(minutes = 120)  # Token expiration time
-    }
-    token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
-    return token
+@app.route('/version', methods=['POST','GET'])
+def version():
+        return jsonify([{"result":'Successful'}])
+
 
 @app.route('/test')
 def index():
@@ -87,11 +60,6 @@ def index():
  
 #mysql = MySQL(app)
 
-
-@app.route('/version', methods=['POST','GET'])
-def version():
-        return jsonify([{"result":'Successful'}])
-
 @app.route('/')
 def home():
     if not session.get('logged_in'):
@@ -100,11 +68,11 @@ def home():
         return "Hello Boss!"
 
 @app.route('/supplier_login', methods=['POST','GET'])
-def supplier_login(dataa=[{'phone_number':'717174','password':'321'}]):
+def supplier_login():
 
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
-    input=dataa[0]
+    input = request.get_json()
     # Execute a query to fetch users
     number=dataa[0]['phone_number']
     query = "SELECT phone_number,password,id FROM suppliers WHERE phone_number='"+number+"'"
@@ -115,12 +83,11 @@ def supplier_login(dataa=[{'phone_number':'717174','password':'321'}]):
         return jsonify([{"result":'user Not Found'}])
     else:
         stored_pass=data[1]
-        if bcrypt.check_password_hash(stored_pass, input['password']):
+        if input['password']==stored_pass:
             # generates the JWT Token
-            token = generate_token(data[2])
-            print(token)
+
     
-            return jsonify({'token' : token, "result":'Successful'})            
+            return jsonify({"result":'Successful'})            
             
         else:
             return jsonify([{"result":'Wrong Password'}])
@@ -132,9 +99,7 @@ def supplier_login(dataa=[{'phone_number':'717174','password':'321'}]):
 
     return home()
 @app.route('/add_supplier', methods= ['Post'])
-@token_required
 def add_supplier():
-    #input=dataa[0]
     input = request.get_json()
     print(input)
     conn = mysql.connector.connect(**db_config)
@@ -148,14 +113,13 @@ def add_supplier():
     if data is None:
         try:
             created=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            hashed_password = bcrypt.generate_password_hash(input['password']).decode('utf-8')
             add_user=  (
             "INSERT INTO `suppliers`"
             "(`name`, `phone_number`, `Region`, `created_at`, `email`, `password`) "
             "VALUES ('{}', '{}', '{}', '{}', '{}', '{}')"
             .format(
                 input['name'], input['phone_number'], input['region'],
-                created, input['email'], hashed_password
+                created, input['email'], input['password']
             )
             )
             cursor.execute(add_user)
@@ -173,7 +137,6 @@ def add_supplier():
 def edit_supplier():
     conn = mysql.connector.connect(**db_config)
     input = request.get_json()
-    print(input)
     cursor = conn.cursor() 
     existing= "Select * FROM suppliers WHERE phone_number='"+input['new_phone']+"'"
     cursor.execute(existing)
@@ -207,22 +170,24 @@ def edit_supplier():
 
 
 @app.route('/client_login', methods=['POST','GET'])
-def client_login(dataa=[{'phone_number':'71504530','password':'mohammad'}]):
+def client_login():
 
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
+    input = request.get_json()
 
     # Execute a query to fetch users
-    number=dataa[0]['phone_number']
+    number=input['phone_number']
     query = "SELECT phone_number,password FROM clients WHERE phone_number='"+number+"'"
-    input=dataa[0]
     cursor.execute(query)
     data = cursor.fetchall()
     if data is None:
         return jsonify([{"result":'user Not Found'}])
     else:
-        if bcrypt.check_password_hash(data[0][1], input['password']):            
-            return jsonify([{"result":'Successful'}])
+        if data[0][1]==input['password']:            
+    
+            return jsonify({"result":'Successful'})            
+            
         else:
             return jsonify([{"result":'Wrong Password'}])
 
@@ -234,8 +199,9 @@ def client_login(dataa=[{'phone_number':'71504530','password':'mohammad'}]):
     return home()
 
 @app.route('/add_client', methods= ['Post','GET'])
-def add_client(dataa=[{'name':'mahdi','phone_number':'71503540','email':'mahdi@hotmail.com','password':'1234'}]):
-    input=dataa[0]
+
+def add_client():
+    input = request.get_json()
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
 
@@ -247,7 +213,6 @@ def add_client(dataa=[{'name':'mahdi','phone_number':'71503540','email':'mahdi@h
     if data is None:
         try:
             created=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            hashed_password = bcrypt.generate_password_hash(input['password']).decode('utf-8')
 
             add_user=  (
             "INSERT INTO `clients`"
@@ -255,7 +220,7 @@ def add_client(dataa=[{'name':'mahdi','phone_number':'71503540','email':'mahdi@h
             "VALUES ('{}', '{}','{}', '{}', '{}')"
             .format(
                 input['name'], input['phone_number'],
-                created, input['email'], hashed_password
+                created, input['email'], input['password']
             )
             )
             cursor.execute(add_user)
@@ -271,10 +236,10 @@ def add_client(dataa=[{'name':'mahdi','phone_number':'71503540','email':'mahdi@h
         return jsonify([{"result":"user already exists"}])
     
 @app.route('/edit_client',methods=['POST','GET'])
-def edit_client(dataa=[{'name':'mahdii','phone_number':'71503540','email':'Mahd@hotmail.com','new_phone':'71514530'}]):
+def edit_client():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
-    input=dataa[0]
+    input = request.get_json()
     existing= "Select * FROM clients WHERE phone_number='"+input['new_phone']+"'"
     cursor.execute(existing)
     old=cursor.fetchone()
@@ -301,10 +266,10 @@ def edit_client(dataa=[{'name':'mahdii','phone_number':'71503540','email':'Mahd@
         return jsonify([{"result":"New user already exists!"}])
 
 @app.route('/change_client_password', methods =['POST','GET'])
-def change_client_password (dataa=[{'phone_number':'71504530','password':'1234','new_password':'Mohamad'}]):
+def change_client_password ():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
-    input=dataa[0]
+    input = request.get_json()
     existing= "SELECT id,phone_number,password FROM clients WHERE phone_number='"+input["phone_number"]+"'"
 
     cursor.execute(existing)
@@ -327,10 +292,10 @@ def change_client_password (dataa=[{'phone_number':'71504530','password':'1234',
         return jsonify([{"result":"wrong old password"}])
     
 @app.route('/change_supplier_password', methods =['POST','GET'])
-def change_supplier_password (dataa=[{'phone_number':'717174','password':'1234','new_password':'321'}]):
+def change_supplier_password ():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
-    input=dataa[0]
+    input = request.get_json()
     existing= "SELECT id,phone_number,password FROM suppliers WHERE phone_number='"+input["phone_number"]+"'"
 
     cursor.execute(existing)
@@ -354,7 +319,6 @@ def change_supplier_password (dataa=[{'phone_number':'717174','password':'1234',
     
 
 @app.route('/view_all_suppliers' , methods=['POST','GET'])
-@token_required
 def view_all_suppliers(dataa=[{'Saida','Beirut'}]):
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
@@ -370,10 +334,12 @@ def view_all_suppliers(dataa=[{'Saida','Beirut'}]):
     return results
 
 @app.route('/view_single_supplier',methods=['POST','GET'])
-def view_single_supplier(phone_number='717171'):
+def view_single_supplier():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
-    single_supplier= "SELECT * FROM suppliers WHERE phone_number = "+phone_number
+    input = request.get_json()
+
+    single_supplier= "SELECT * FROM suppliers WHERE phone_number = "+input['phone_number']
     cursor.execute(single_supplier)
     results = [{key: value for key, value in zip(cursor.column_names, row)} for row in cursor.fetchall()]
     cursor.close()
@@ -381,10 +347,10 @@ def view_single_supplier(phone_number='717171'):
     
     return jsonify (results)
 @app.route('/add_order',methods=['POST','GET'])
-def add_order(dataa=[{'client_id':'1','tank_id':'2','payment_method':'cash'}]):
+def add_order():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
-    input=dataa[0]
+    input = request.get_json()
     created=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     add= (
@@ -403,7 +369,8 @@ def add_order(dataa=[{'client_id':'1','tank_id':'2','payment_method':'cash'}]):
     return jsonify([{"result":"order added successfully!"}])
     
 @app.route('/delete_order',methods=['POST','GET'])
-def delete_order(id=4):
+def delete_order():
+    input = request.get_json()
 
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
@@ -411,7 +378,7 @@ def delete_order(id=4):
             "UPDATE `orders`set"
             "`state`='{}' where id={} "
             .format(
-                'deleted',id
+                'deleted',input['id']
             )
             )
     cursor.execute(delete)
@@ -421,8 +388,8 @@ def delete_order(id=4):
     return jsonify([{"result":"order deleted successfully!"}])
 
 @app.route('/add_offer',methods=['POST','GET'])
-def add_offer(dataa=[{'order_id':'4','supplier_id':'1','tank_id':'2','payment_method':'cash'}]):
-    input=dataa[0]
+def add_offer():
+    input = request.get_json()
     conn=mysql.connector.connect(**db_config)
     cursor=conn.cursor()
     created=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -442,10 +409,12 @@ def add_offer(dataa=[{'order_id':'4','supplier_id':'1','tank_id':'2','payment_me
     return jsonify([{"result":"offer added successfully!"}])
 
 @app.route('/delete_offer')
-def delete_offer(id=2):
+def delete_offer():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
-    check_offer="SELECT * from offers where id="+id
+    input = request.get_json()
+
+    check_offer="SELECT * from offers where id="+input['id']
     cursor.execute(check_offer)
     checkk= ', '.join([f"'{item}'" for item in cursor.fetchall()])
     if checkk[0][5]=='pending':
@@ -454,7 +423,7 @@ def delete_offer(id=2):
             "UPDATE `offers`set"
             "`state`='{}' where id={} "
             .format(
-                'deleted',id
+                'deleted',input['id']
             )
             )
         return jsonify([{"result":"offer deleted successfully!"}])
@@ -471,8 +440,8 @@ def delete_offer(id=2):
     conn.close()
 
 @app.route('/accept_offer',methods=['POST','GET'])
-def accept_offer(dataa=[{'offer_id':'3','order_id':'4'}]):
-    input=dataa[0]
+def accept_offer():
+    input = request.get_json()
     conn=mysql.connector.connect(**db_config)
     cursor=conn.cursor()
     get_offer=('SELECT * from offers where id='+input['offer_id'])
@@ -513,15 +482,17 @@ def accept_offer(dataa=[{'offer_id':'3','order_id':'4'}]):
     return jsonify([{"result":"offer accepted successfully!"}])    
 
 @app.route("/complete_order", methods=['POST','GET'])
-def complete_order(id=9):
+def complete_order():
     conn=mysql.connector.connect(**db_config)
     cursor=conn.cursor()
+    input = request.get_json()
+
     updated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     update_order=("UPDATE `orders` set "
              "`state`='{}',`updated_at`='{}' where `id`='{}'"
             .format(
-            'completed',updated_at,id
+            'completed',updated_at,input['id']
 
                   )
                   )
@@ -532,10 +503,10 @@ def complete_order(id=9):
     return jsonify([{"result":"order completed successfully!"}]) 
 
 @app.route("/view_client_orders", methods=['POST','GET'])
-def all_orders(dataa=[{'client_id':'1','state':'all'}]):
+def all_orders():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
-    input=dataa[0]
+    input = request.get_json()
 
 
     if input['state']=='all':
@@ -555,10 +526,10 @@ def all_orders(dataa=[{'client_id':'1','state':'all'}]):
     return jsonify(results)
 
 @app.route('/view_supplier_orders',methods=['POST','GET'])
-def view_supplier_orders(dataa=[{'supplier_id':'1','state':'pending'}]):
+def view_supplier_orders():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor() 
-    input=dataa[0]
+    input = request.get_json()
 
 
     if input['state']=='all':
@@ -578,10 +549,12 @@ def view_supplier_orders(dataa=[{'supplier_id':'1','state':'pending'}]):
     return jsonify(results)
 
 @app.route('/view_offers',methods=['POST','GET'])
-def view_orders(id=4):
+def view_orders():
     conn = mysql.connector.connect(**db_config)
-    cursor = conn.cursor() 
-    offers=("SELECT * from offers where order_id="+str(id))
+    cursor = conn.cursor()
+    input = request.get_json()
+
+    offers=("SELECT * from offers where order_id="+str(input['id']))
 
     cursor.execute(offers)
     results = [{key: value for key, value in zip(cursor.column_names, row)} for row in cursor.fetchall()]
@@ -590,11 +563,11 @@ def view_orders(id=4):
     return jsonify(results)
 
 @app.route('/add_tank',methods=['POST','GET'])
-def add_tank(dataa=[{'type':'tank','size':'10','region':'beirut','client_id':'1','address':'city-area-street-bldg-floor'}]):
+def add_tank():
     created=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
-    input=dataa[0]
+    input = request.get_json()
     add_tank=  (
             "INSERT INTO `tanks`"
             "(`type`, `size`,`region`,`client_id`,`address` ,`created_at`) "
@@ -610,14 +583,16 @@ def add_tank(dataa=[{'type':'tank','size':'10','region':'beirut','client_id':'1'
     conn.close()
     return jsonify([{"result":"Item added successfully!"}])
 @app.route('/delete_tank',methods=['POST','GET'])
-def delete_tank(id=4):
+def delete_tank():
+    input = request.get_json()
+
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
-    being_used="SELECT * from orders where tank_id="+str(id)
+    being_used="SELECT * from orders where tank_id="+str(input['id'])
     cursor.execute(being_used)
     check=cursor.fetchone()
     if check is None:
-        delete="DELETE FROM `tanks` WHERE ID="+str(id)
+        delete="DELETE FROM `tanks` WHERE ID="+str(input['id'])
         cursor.execute(delete)
         conn.commit()
         cursor.close()
