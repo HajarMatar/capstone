@@ -1,0 +1,27 @@
+&#123;% block body %&#125;
+&#123;% if session['logged_in'] %&#125;
+
+You're logged in already!
+
+&#123;% else %&#125;
+<form action="/login" method="POST">
+  <input type="username" name="username" placeholder="Username">
+<input type="password" name="password" placeholder="Password">
+<input type="submit" value="Log in">
+</form>
+&#123;% endif %&#125;
+&#123;% endblock %&#125;
+&#123;% endraw %&#125;
+<!--<h1>Supplier List</h1>
+    <ul>
+        {% for sup in data %}
+        <li>{{ sup[1] }} ({{ sup[2] }})</li>
+        {% endfor %}
+    </ul> -->
+
+    <ul>
+      {% for sup in data %}
+      <li>{{ sup[1] }})</li>
+      {% endfor %}
+  </ul>
+    
