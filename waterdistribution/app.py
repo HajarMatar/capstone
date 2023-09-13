@@ -489,7 +489,7 @@ def add_offer():
     return jsonify({"result":"offer added successfully!"})
 
 
-@app.route('/delete_offer', methods=['DELETE'])
+@app.route('/delete_offer', methods=['POST','GET'])
 def delete_offer():
     input_id = request.args.get('id')
     updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -518,7 +518,7 @@ def delete_offer():
     except mysql.connector.Error as err:
         return jsonify({"result": "Error: " + str(err)}), 500
 
-@app.route('/accept_offer', methods=['PUT'])
+@app.route('/accept_offer', methods=['POST'])
 def accept_offer():
 
     input_id = request.args.get('id')
@@ -567,6 +567,7 @@ def complete_order():
     conn = mysql.connector.connect(**db_config)
     cursor = conn.cursor()
     id = request.args.get('id')
+    offerId = request.args.get('offer_id')
 
     updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -576,6 +577,12 @@ def complete_order():
     )
 
     cursor.execute(update_order)
+
+    update_offer = (
+        "UPDATE `offers` SET `state`='completed', `updated_at`='{}' WHERE `id`='{}'"
+        .format(updated_at, offerId)
+    )
+    cursor.execute(update_offer)
     conn.commit()
     cursor.close()
     conn.close()
@@ -631,15 +638,15 @@ def view_supplier_orders_to_serve():
     id = request.args.get('id')
 
     supplier_orders_query = (
-        "SELECT orders.*, clients.name as client_name, clients.phone_number as client_phone "
+        "SELECT orders.*, offers.id as offers_id, clients.name as client_name, clients.phone_number as client_phone "
         "FROM orders "
+        "JOIN offers ON offers.order_id = orders.id "
         "JOIN clients ON orders.client_id = clients.id "
-        "WHERE orders.state='accepted' AND orders.supplier_id=%s"
+        "WHERE offers.state='accepted' AND offers.supplier_id=%s"
     )
 
     cursor.execute(supplier_orders_query, (id,))
     results = [dict(zip(cursor.column_names, row)) for row in cursor.fetchall()]
-
     cursor.close()
     conn.close()
 
